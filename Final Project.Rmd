@@ -1,0 +1,385 @@
+---
+title: "Final Project"
+author: "Amber Trinh"
+date: "2022-10-31"
+output: html_document
+---
+
+# Topic Page and Authors
+
+```{r}
+# Topic: Glassdoor Gender Pay Gap 2019
+
+#Project group members: Trinh, Amber
+```
+
+# Dataset background and description
+
+a) brief summary of data set
+
+```{r}
+# This data set was created by Glassdoor Economic Research to help HR practitioners perform their own internal gender pay audit. This data set has sample gender pay gap data for a hypothetical employer with 1,000 employees across 10 job roles and 5 company departments. 
+```
+
+b) motivation for choosing the data set
+
+```{r}
+# As a rising 4th year, I am envisioning what my life will soon like when I enter the industry. Part of that involves thinking and comparing salaries and job positions.
+
+# However, as a woman who wants to enter the tech industry, a primarily male-dominated field, I know that I may not be as equally valued to male co-workers. 
+
+# For years, I've been working (first an intern, now part-time employee) at a tech company in their HR and AP department. I know that the gender pay gap is still a real and pressing issue on a social, legal, and business standpoint. 
+
+# I chose this data set because I wanted to learn more about how I can analyze the gender pay gap myself and was curious about what results this analysis would produce.
+```
+
+# Data preparation and summary: manipulation and summary of relevant variables
+
+a) data cleaning
+
+```{r}
+# load necessary libraries
+library(dplyr)
+library(stargazer)
+library(ggplot2)
+library(RColorBrewer)
+library(caret)
+library(ISLR)
+library(ggcorrplot)
+library(car)
+
+```
+
+
+```{r}
+# load data set and save to data frame
+GPG<-read.csv("Glassdoor Gender Pay Gap.csv")
+
+# add above and below median base pay variable
+# add total pay for year (base + bonus)
+gpg<-GPG%>%
+  mutate("TotalPay"=BasePay+Bonus)%>%
+  mutate("BelowMedianPay"=ifelse(TotalPay<100047, "Yes", "No"))
+
+# find median of total pay of entire company
+summary(gpg$TotalPay) 
+
+# create factor for education to order education levels
+gpg$Education<-factor(gpg$Education, levels=c("High School", "College", "Masters", "PhD"))
+
+```
+
+b) sub-setting to summarize key variables
+
+```{r}
+# only females
+females<-gpg%>%
+  filter(Gender=="Female")
+
+# only males
+males<-gpg%>%
+  filter(Gender=="Male")
+
+# job titles
+jobs<-gpg%>%
+  select(JobTitle)%>%
+  table()
+jobs
+
+# departments
+depts<-gpg%>%
+  select(Dept)%>%
+  table()
+depts
+
+# filter age groups (under 30, 30-50, 50+)
+young<-gpg%>%
+  filter(Age<30)
+  
+mid<-gpg%>%
+  filter(Age>=30 & Age<50)
+  
+old<-gpg%>%
+  filter(Age>50)
+
+# filter by education
+hs<-gpg%>%
+  filter(Education=="High School")
+
+college<-gpg%>%
+  filter(Education=="College")
+
+masters<-gpg%>%
+  filter(Education=="Masters")
+
+phd<-gpg%>%
+  filter(Education=="PhD")
+
+# filter by level of seniority
+entrylevel<-gpg%>%
+  filter(Seniority<3)
+
+seniorlevel<-gpg%>%
+  filter(Seniority>=3)
+
+```
+
+c) Summary measures
+
+```{r}
+glimpse(gpg)
+
+# summaries of numeric variables: Age, PerfEval, Seniority, BasePay, Bonus
+
+summary(gpg$Age)
+summary(gpg$PerfEval)
+summary(gpg$Seniority)
+summary(gpg$BasePay)
+summary(gpg$Bonus)
+summary(gpg$TotalPay)
+
+# numerical summaries by gender
+tapply(gpg$Age, gpg$Gender, summary)
+tapply(gpg$PerfEval, gpg$Gender, summary)
+tapply(gpg$Seniority, gpg$Gender, summary)
+tapply(gpg$BasePay, gpg$Gender, summary)
+tapply(gpg$Bonus, gpg$Gender, summary)
+tapply(gpg$TotalPay, gpg$Gender, summary)
+
+# data frame summary of overall male-female pay differences in base pay
+gpg_summary<-gpg%>%
+  group_by(Gender)%>%
+  summarise("Mean Base Pay"=mean(BasePay, na.rm=TRUE), "Median Base Pay"=median(BasePay, na.rm=TRUE), "Observations"=sum(!(is.na(BasePay))))
+
+View(gpg_summary)
+
+# summaries of categorical variables: JobTitle, Gender, Education, Dept
+# frequency tables
+table(gpg$JobTitle)
+table(gpg$Gender)
+table(gpg$Education)
+table(gpg$Dept)
+table(gpg$BelowMedianPay)
+
+# 2-way tables
+table(gpg$JobTitle, gpg$Gender)
+table(gpg$Dept, gpg$Gender)
+table(gpg$Education, gpg$Gender)
+
+# spread of employees across job titles
+job_summary<-gpg%>%
+  group_by(JobTitle, Gender)%>%
+  summarise("Mean Total Pay"=mean(TotalPay, na.rm=TRUE), Employees=sum(!(is.na(JobTitle))))
+
+View(job_summary)
+
+```
+
+# Data visualization
+
+a)
+
+```{r}
+# bar graph of key categorical variables
+
+# 2 categorical variables: stacked/percent-stacked/side-by-side dodge bar graph
+# How many employees take up each position in the company, and how many are male and female?
+ggplot(gpg,aes(x=JobTitle,fill=Gender))+geom_bar(position="dodge")+theme(axis.text.x = element_text(angle=90))+labs(x="Job Titles", y="Number of Employees", title="Gender of Employee Positions")+theme(plot.title = element_text(hjust = 0.5))
+
+# histogram/boxplot of key numerical variables
+ggplot(gpg, aes(y=TotalPay))+geom_boxplot(fill="darkseagreen4")+theme(axis.text.x = element_text(angle=90))+labs(y="Total Pay (USD)", title="Total Pay Summary")+theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+
+b)
+
+```{r}
+# side-by-side boxplot for numeric-categorical relationship
+
+# total pay of each gender
+ggplot(gpg, aes(x=Gender, y=TotalPay, fill=Gender))+geom_boxplot()+labs(x="Gender", y="Total Pay (USD)", title="Total Pay Difference Female vs. Male")+theme(plot.title = element_text(hjust = 0.5))
+
+# scatterplot for numeric-numeric relationship
+
+# correlation between seniority and total pay
+
+ggplot(gpg,aes(x=Seniority,y=TotalPay,color=Gender))+geom_point(alpha=0.4)+scale_size(range=0.025,0.025)+labs(x="Seniority", y="Total Pay (USD)",title="Seniority vs. Total Pay")+theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+
+c)
+
+```{r}
+# bubble plot or facet-wrapped graph or side-by-side boxplots of 3 or more variables
+
+# total pay of each position
+ggplot(gpg, aes(x=JobTitle,y=TotalPay,fill=Gender))+geom_boxplot()+theme(axis.text.x = element_text(angle=90))+labs(x="Job Titles", y="Total Pay (USD)", title="Total Pay Difference Amongst Jobs")+theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+d)
+
+```{r}
+# heatmap or wordcloud
+
+ggplot(gpg, aes(x=Gender,y=JobTitle,fill=TotalPay))+geom_tile(color="white")+scale_fill_gradient(low="white", high="darkseagreen4")+labs(x="Gender", y="Job Titles", title="Top Paying Jobs by Gender")+theme(plot.title = element_text(hjust = 0.5))+guides(color=guide_legend(title="Total Pay (USD)"))
+
+
+```
+
+
+# Regression
+
+a)
+
+```{r}
+# multiple or simple linear regression
+
+glimpse(gpg)
+# select desired variables to a new data frame
+nd<-select(gpg, Age, PerfEval, Seniority, TotalPay)
+
+# build correlation matrix to calc correlation amongst selected variables
+cor_matrix<-round(cor(nd),2)
+View(cor_matrix)
+
+# plot correlations in correlogram
+ggcorrplot(cor_matrix, type="lower", lab=T)
+
+# build multilinear model
+pay_model<-train(TotalPay~., nd, method="lm")
+summary(pay_model)
+
+# get final model
+pay_model$finalModel
+
+# VIF
+vif(pay_model$finalModel)
+
+# AIC
+better_model<-train(TotalPay~., nd, method="lmStepAIC", trace=F)
+summary(better_model)
+
+# Interpretation
+# Holding all other variables fixed, for every 1 increment increase in level of  Seniority, the TotalPay increases by $9,796.53.
+
+# About 58.17% of the variability in TotalPay can be explained by this multiple regression model.
+
+# The predictive power of this model is 58.04%
+
+# pick reasonable values for predictor variables to make a prediction of the response variable
+
+# create new data point
+new<-data.frame(Age=22, PerfEval=3, Seniority=1)
+
+# make a prediction using new data point and best model
+predict(better_model, new)
+
+# given the data provided for age, perfeval, and seniority, the model predicts that the employee will be paid a total of $62,871.48.
+
+# equation: TotalPay = 28823.78 + 965.41*Age + 1004.04*PerfEval + 9796.53*Seniority
+
+```
+
+b)
+
+```{r}
+# logistic regression model 
+# is being a female related to total pay (being above/below median pay)?
+# how to tell if 2 categorical variables are related/independent:
+ggplot(gpg, aes(x=Gender, fill=BelowMedianPay))+geom_bar(position = "fill")
+
+# extract only females, select desired variables for new data frame 
+amp<-gpg%>%
+  filter(Gender=="Female")%>%
+  select(BelowMedianPay, Age, PerfEval, Seniority)
+View(amp)
+
+# extract only predictor variables (BelowMedianPay is used as response variable)
+VAR<-select(amp,-BelowMedianPay)
+View(VAR)
+
+# calc correlation matrix
+cor_mat2<-round(cor(VAR),2)
+View(cor_mat2)
+ggcorrplot(cor_mat2, type="lower", lab=TRUE)
+
+# create logit model
+logit<-train(BelowMedianPay~., amp, method="glm", family="binomial")
+summary(logit)
+
+# VIF
+vif(logit$finalModel)
+
+# use best predictors w/ StepAIC
+logit_aic<-train(BelowMedianPay~., amp, method="glmStepAIC",family="binomial",direction="both", trace=FALSE)
+summary(logit_aic)
+
+# exponentiation
+exp(coef(logit_aic$finalModel))
+
+# Failure = 0 = No
+# Success = 1 = Yes
+# Interpret change of odds of being above median
+
+# age odds calc
+(1-0.8849649)*100
+
+# Odds interpretation for age
+# Holding all other variables in the model fixed, for every year increase in age among female employees, the odds of having a total pay below median decreases by 12%.
+
+# perfeval odds calc
+(1-0.8722995)*100
+
+# odds interpretation for perfeval
+# Holding all other variables in the model fixed, for each increment increase in perfeval among female employees, the odds of having a total pay below median decreases by 13%.
+
+
+# seniority odds calc
+(1-0.2818193)*100
+
+# odds interpretation for seniority
+# Holding all other variables in the model fixed, for each increasing level in seniority among female employees, the odds of having a total pay below median decreases by 72%
+
+
+# pick reasonable values for predictor variables to make a prediction of the response variable
+
+new2<-data.frame(Age=22, PerfEval=3, Seniority=1)
+predict(logit_aic,new2)
+
+# equation:
+# ln(p/(1-p)) = 9.80726 -0.12221*Age - 0.13662*PerfEval - 1.26649*Seniority
+```
+
+
+# Classification
+
+```{r}
+# KNN model
+
+# make graphs to find closest neighbor
+ggplot(gpg, aes(x=Seniority, y=TotalPay, color=Gender))+geom_point()+labs(x="Seniority", y="Total Pay (USD)", title="Seniority vs. Total Pay")+theme(plot.title = element_text(hjust = 0.5))
+
+# make a point
+new_emp<-data.frame(Seniority=4, TotalPay=100000)
+
+# add new point to graph, specifying color
+ggplot(gpg, aes(x=Seniority, y=TotalPay, color=Gender))+geom_point()+geom_point(data=new_emp,color="black")+labs(x="Seniority", y="Total Pay (USD)", title="Seniority vs. Total Pay")+theme(plot.title = element_text(hjust = 0.5))
+
+# build model
+knn_model<-train(Gender~Seniority+TotalPay,gpg,method="knn")
+
+# find how mnay nearest neighbors to count
+knn_model$finalModel
+
+# find out why they chose optimal number of neighbors to pick
+ggplot(knn_model)
+
+# pick reasonable values for predictor variables to make a prediction of the response variable
+
+predict(knn_model,new_emp)
+```
+
+
